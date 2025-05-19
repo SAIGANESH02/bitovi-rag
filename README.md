@@ -11,6 +11,11 @@ Main Goal: Build a maintainable, easily extensible RAG system with modular workf
 
 ### Architecture
 
+#### Data Ingestion Workflow
+![image](https://github.com/user-attachments/assets/aa0af44a-7f61-4627-b565-ceea2b2e2443)
+
+#### RAG Agent Chat Workflow
+![image](https://github.com/user-attachments/assets/810efe16-10db-4161-a046-044cffa4362f)
 
 
 ### Key Project Files
