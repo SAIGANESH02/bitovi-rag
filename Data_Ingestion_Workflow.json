@@ -1,0 +1,656 @@
+{
+  "name": "Data Ingestion Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "e9b34619-26fe-46fd-835f-ac0affc15601",
+      "name": "Embeddings OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1,
+      "position": [
+        3000,
+        1060
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "RpbfHnTmI01ADQkc",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "=id",
+                "value": "={{ $('Check Vectorization Status').item.json.id }}"
+              },
+              {
+                "name": "author",
+                "value": "={{ $('Check Vectorization Status').item.json.author }}"
+              },
+              {
+                "name": "date",
+                "value": "={{ $('Check Vectorization Status').item.json.date }}"
+              },
+              {
+                "name": "article_link",
+                "value": "={{ $('Check Vectorization Status').item.json.article_link}}"
+              },
+              {
+                "name": "title",
+                "value": "={{ $('Check Vectorization Status').item.json.title}}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "3e9400d5-1b25-4074-8ce7-9cf3f547a112",
+      "name": "Default Data Loader",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1,
+      "position": [
+        3180,
+        1060
+      ]
+    },
+    {
+      "parameters": {
+        "chunkSize": 400,
+        "options": {}
+      },
+      "id": "8f3827a5-9c57-4df8-b6a9-376ad4d874fc",
+      "name": "Recursive Character Text Splitter",
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        3180,
+        1220
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "tableName": "documents",
+        "options": {
+          "columnNames": {
+            "values": {
+              "contentColumnName": "content"
+            }
+          }
+        }
+      },
+      "id": "439a7980-06d6-416f-b8e4-e0925d1e25e7",
+      "name": "Postgres PGVector Store",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePGVector",
+      "typeVersion": 1,
+      "position": [
+        3200,
+        820
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "maxTries": 5,
+      "credentials": {
+        "postgres": {
+          "id": "tXJvD0nrvddTgXB5",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://www.bitovi.com/blog/page/{{$json[\"page\"]}}",
+        "options": {}
+      },
+      "id": "36e0df54-fa11-4617-84da-01a39d394794",
+      "name": "Bitovi Blog Site",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return Array.from({ length: 40 }, (_, i) => ({ json: { page: i + 1 } }));"
+      },
+      "id": "9b9bc03c-7966-4056-8f6d-e42d45ef10a6",
+      "name": "Pagination Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "content",
+              "cssSelector": ".prose",
+              "returnArray": true
+            }
+          ]
+        },
+        "options": {
+          "cleanUpText": true
+        }
+      },
+      "id": "d1fe47fb-4031-4128-a593-caeec22cc1f9",
+      "name": "Extract Article Content",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        3340,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE document_metadata\nSET vector_created = TRUE\nWHERE vector_created = FALSE;",
+        "options": {}
+      },
+      "id": "121a0c27-3cd0-4b53-ba10-9f47f1b7b046",
+      "name": "Update vector_created",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2840,
+        760
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tXJvD0nrvddTgXB5",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "title, author, date, article_link",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1380,
+        120
+      ],
+      "id": "edd3eb28-520e-496f-bec0-006987582db7",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 12
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        20,
+        -20
+      ],
+      "id": "ea8d0d61-5a36-45a4-88f1-c2ad7528e243",
+      "name": "Daily Blog Crawler Trigger"
+    },
+    {
+      "parameters": {},
+      "id": "dfb936aa-25f5-4bc2-8d54-be2a7870c464",
+      "name": "Manual Crawl Kickoff",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "b3c0b416-040e-4a4a-b7c5-4a383a21fc28",
+      "name": "Blog Page Iterator - Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        600,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO document_metadata (title, date, author, article_link, vector_created)\nVALUES ($1, $2, $3, $4, 'false')\nON CONFLICT (article_link) DO NOTHING;\n",
+        "options": {
+          "queryReplacement": "{{$json[\"title\"]}}, {{$json[\"date\"]}}, {{$json[\"author\"]}}, {{$json[\"article_link\"]}}"
+        }
+      },
+      "id": "c914cb44-5937-48c3-92ff-4a7738a7796a",
+      "name": "Store in DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1880,
+        120
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tXJvD0nrvddTgXB5",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Bug in If Nodes being used after SQL Queries...! https://community.n8n.io/t/when-using-if-in-flow-it-gives-wrong-results-every-time/51204/3\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        120
+      ],
+      "id": "4e06f95a-aa4a-4793-a4bb-4c2e9ce3e40a",
+      "name": "Bypass IF Node Bug"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, title, date, author, article_link FROM document_metadata WHERE vector_created IS false;\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2140,
+        120
+      ],
+      "id": "2dc86f91-d94f-4456-bdb4-53cc51dad6bd",
+      "name": "Retrieve Unvectorized Articles",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "tXJvD0nrvddTgXB5",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9fc66f9a-d7d9-44c5-bf26-45e154eb6271",
+              "leftValue": "={{ Object.keys($json).length > 0 }}\n",
+              "rightValue": 0,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2700,
+        120
+      ],
+      "id": "521d2497-1592-45d0-81cf-4e6c93caec68",
+      "name": "Check Vectorization Status",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.article_link }}",
+        "options": {}
+      },
+      "id": "dd97667c-dc2d-4b45-9e17-c891cedfd527",
+      "name": "Download Full Article HTML",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3060,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e557c1fb-e8a5-41e1-bb46-1a87b94d3558",
+              "name": "date",
+              "value": "={{  new Date($json[\"date\"]).toISOString().split(\"T\")[0] }}\n",
+              "type": "string"
+            },
+            {
+              "id": "8bdf6e33-a360-4413-8424-fdc2158244ec",
+              "name": "title",
+              "value": "={{ $json[\"title\"].replace(/,/g, \"\") }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1620,
+        120
+      ],
+      "id": "2f3efd0b-da94-48c6-96ae-11434163b86a",
+      "name": "Format Metadata Fields"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "title",
+              "cssSelector": "a.w-full .blog-post-header-image-wrapper p",
+              "returnArray": true
+            },
+            {
+              "key": "date",
+              "cssSelector": "a.w-full time",
+              "returnArray": true
+            },
+            {
+              "key": "author",
+              "cssSelector": ".blog-tile-author-info p.font-bold",
+              "returnArray": true
+            },
+            {
+              "key": "article_link",
+              "cssSelector": ".bitovi-blog-home-tile > a.w-full",
+              "returnValue": "attribute",
+              "attribute": "href",
+              "returnArray": true
+            }
+          ]
+        },
+        "options": {
+          "cleanUpText": false
+        }
+      },
+      "id": "82ce013d-46ca-4b28-b0a9-ad443f88f36f",
+      "name": "Extract HTML COntent",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        1140,
+        120
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Embeddings OpenAI": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Postgres PGVector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Postgres PGVector Store",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recursive Character Text Splitter": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Default Data Loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres PGVector Store": {
+      "main": [
+        [
+          {
+            "node": "Update vector_created",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bitovi Blog Site": {
+      "main": [
+        [
+          {
+            "node": "Extract HTML COntent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pagination Handler": {
+      "main": [
+        [
+          {
+            "node": "Blog Page Iterator - Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Article Content": {
+      "main": [
+        [
+          {
+            "node": "Postgres PGVector Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update vector_created": {
+      "main": [
+        [
+          {
+            "node": "Blog Page Iterator - Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Format Metadata Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Blog Crawler Trigger": {
+      "main": [
+        [
+          {
+            "node": "Pagination Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Crawl Kickoff": {
+      "main": [
+        [
+          {
+            "node": "Pagination Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Blog Page Iterator - Loop": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Bitovi Blog Site",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store in DB": {
+      "main": [
+        [
+          {
+            "node": "Retrieve Unvectorized Articles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bypass IF Node Bug": {
+      "main": [
+        [
+          {
+            "node": "Check Vectorization Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrieve Unvectorized Articles": {
+      "main": [
+        [
+          {
+            "node": "Bypass IF Node Bug",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Vectorization Status": {
+      "main": [
+        [
+          {
+            "node": "Download Full Article HTML",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Postgres PGVector Store",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Blog Page Iterator - Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Full Article HTML": {
+      "main": [
+        [
+          {
+            "node": "Extract Article Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Metadata Fields": {
+      "main": [
+        [
+          {
+            "node": "Store in DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract HTML COntent": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Chicago",
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "cabb1306-eedc-4c9f-840a-6ef73d20f7c2",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b32916e8186656ae004d983688e1ad532bb31dac98f2af9254af43a63b95cfec"
+  },
+  "id": "NpCO2EQOMNUXokyy",
+  "tags": []
+}

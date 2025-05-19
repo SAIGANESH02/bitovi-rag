@@ -1,0 +1,268 @@
+{
+  "name": "AI Agent with RAG",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {
+          "batchSize": 512
+        }
+      },
+      "id": "ddf52f43-8aa6-46da-b6af-b7190e55af11",
+      "name": "Embeddings OpenAI1",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1,
+      "position": [
+        2640,
+        1720
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "RpbfHnTmI01ADQkc",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1740,
+        1720
+      ],
+      "id": "7cf6a1da-a208-4065-bb49-cd0b4ed37cae",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "RpbfHnTmI01ADQkc",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        1960,
+        1740
+      ],
+      "id": "85bd08c1-bbea-48f6-91f7-9f24d8825959",
+      "name": "Postgres Chat Memory",
+      "credentials": {
+        "postgres": {
+          "id": "tXJvD0nrvddTgXB5",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "78d656e9-0cdf-4fd6-9712-bb0cb4e00bf9",
+      "name": "Chat",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        1780,
+        1400
+      ],
+      "webhookId": "24f7665f-bed1-402c-9f4e-29376829a6b7"
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use this tool to fetch all available documents.",
+        "operation": "select",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "document_metadata",
+          "mode": "list",
+          "cachedResultName": "document_metadata"
+        },
+        "returnAll": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        2280,
+        1740
+      ],
+      "id": "a34f2400-75db-4be6-b44a-f39d8751c149",
+      "name": "List Documents",
+      "credentials": {
+        "postgres": {
+          "id": "tXJvD0nrvddTgXB5",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    string_agg(content, ' ') as document_content\nFROM documents\n    WHERE (metadata::jsonb)->>'id' = $1\nGROUP BY (metadata::jsonb)->>'id';",
+        "options": {
+          "queryReplacement": "{{ $fromAI('id') }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        2480,
+        1720
+      ],
+      "id": "e6867cd2-64de-4dbf-ae03-62366b236078",
+      "name": "Get Article Contents",
+      "credentials": {
+        "postgres": {
+          "id": "tXJvD0nrvddTgXB5",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolName": "documents",
+        "toolDescription": "Use RAG to look up information in the knowledge base.",
+        "tableName": "documents",
+        "options": {}
+      },
+      "id": "40c734ef-a084-4a76-a37d-c4b3ad3e8dbb",
+      "name": "PGVector Store",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePGVector",
+      "typeVersion": 1,
+      "position": [
+        2440,
+        1460
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tXJvD0nrvddTgXB5",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "=You are a helpful and honest AI assistant designed to answer questions using Bitovi’s blog content. You do **not** make up answers—if you don’t know something, you say so clearly.\n\nYou have access to a corpus of blog articles stored in two main forms:\n\n1. **Unstructured documents** (blog articles and extracted text, code, and external links).\n2. **Structured tabular data** (metadata like article titles, dates, authors, links, stored in the `document_metadata` table).\n\nYou are equipped with the following tools:\n- **List Documents**: Browse available documents from the metadata table.\n- **Get Article Contents**: Extract full text from a selected article.\n- **PGVector Store**: Perform RAG-based semantic search on indexed documents.\n\n### 🧠 Behavior Rules\n\n1. **Default to RAG**  \n   Always begin by querying the vector store unless the user explicitly asks for:\n   - Specific metadata (e.g., most recent article, count of AI articles)\n   - Keyword filtering (e.g., \"articles about DevOps\")\n   - SQL-compatible queries like counts, filters by date/topic\n\n2. **Fallback when RAG fails**  \n   If RAG doesn’t return a helpful result:\n   - Use `List Documents` to explore the metadata\n   - Select likely candidates and fetch contents using `Get Article Contents`\n   - Try again to answer the query from those\n\n3. **Cite Sources**  \n   Always reference the Bitovi blog articles used, including links where possible.\n\n4. **Be Transparent and Safe**  \n   If you're unsure or cannot find the answer, say:  \n   _\"I couldn't find a definitive answer in the available Bitovi blog content, but here's what I found...\"_  \n   Or:  \n   _\"I don’t have that information right now.\"_\n\n5. **Be Succinct, Relevant, and Human**  \n   Write concise, informative answers. Avoid filler, hallucinations, or speculation. Your answers should feel like a trusted colleague giving a well-researched response.\n\n---\n\n### ✅ Examples You Should Be Able to Handle\n\n- _“What is Bitovi's latest blog post about?”_  \nToday's date is {{ DateTime.now() }} so sort the dates based on this date and select the closest one\n\n  → Use `document_metadata` to find the most recent article by date, extract it, and summarize.\n\n- _“Can you show me all Bitovi articles about DevOps?”_  \n  → Search metadata for keyword “DevOps” in titles or use RAG to retrieve DevOps-related vectors.\n\n- _“How many articles does Bitovi have about AI?”_  \n  → Use SQL or metadata to count articles where \"AI\" appears in the title or tags.\n\n- _“What kind of tools does Bitovi recommend for E2E testing?”_  \n  → Use RAG, retrieve recommendations, and link to original sources.\n\n---\n\nIf a user asks you something outside the blog corpus, politely inform them and redirect focus toward what’s available.\n\nStay grounded. Stay helpful. Always cite sources."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1960,
+        1400
+      ],
+      "id": "c0b52998-96a2-4577-9f31-549e564694fc",
+      "name": "AI Agent"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Embeddings OpenAI1": {
+      "ai_embedding": [
+        [
+          {
+            "node": "PGVector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Documents": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Article Contents": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PGVector Store": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "28787552-1c65-4853-9f46-cd03bf3ce0db",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b32916e8186656ae004d983688e1ad532bb31dac98f2af9254af43a63b95cfec"
+  },
+  "id": "dvPSNPZV5Akk8Hy1",
+  "tags": []
+}
