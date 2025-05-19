@@ -64,7 +64,7 @@ Stores past user-agent conversations.
 ### 1. Data Ingestion Workflow (Data_Ingestion_Workflow.json)
 
 Steps:
-- Fetch article metadata from a source or API.
+- Fetch article metadata from a source URL.
 - Store metadata in `document_metadata`.
 - Fetch and chunk article content.
 - Generate vector embeddings using an embedding model.
